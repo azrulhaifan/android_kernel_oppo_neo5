@@ -779,13 +779,12 @@ int set_backlight_pwm(int state)
 {
 	int ret;
 	struct lm3630_chip_data *pchip = lm3630_pchip;
-	if(is_project(OPPO_13095)){
+#ifdef CONFIG_MACH_13095
 		if((get_PCB_Version() < HW_VERSION__12)){
 			ret=lm3630_write_reg(pchip->client,0x01,0x18);
 			return 0;
-		//	pr_err("LM3630 set pwm__________0x14 flag true\n");
 		}
-	}
+#endif
 	
 	if((state==1)&&(backlight_level <= CABC_DISABLE_LEVEL)){	
 	//	pr_err("LM3630 set pwm__________0x14 flag true\n");
