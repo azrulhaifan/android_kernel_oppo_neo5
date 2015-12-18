@@ -384,11 +384,7 @@ struct smb358_charger {
 	int 		non_standard_vfloat_mv;
 	int			non_standard_fastchg_current_ma;
 	struct regulator*	vcc_i2c;
-	#if 0//VENDOR_EDIT
-	int			irq_gpio;
-	#else
 	int			stat_gpio;
-	#endif
 	int			fastcharger;
 };
 
@@ -873,18 +869,6 @@ static int smb358_hw_init(struct smb358_charger *chip)
 		}
 	}
 
-#if 0
-	/* set low_battery voltage threshold */
-	reg = 0x0f;//3.58V
-	rc = smb358_masked_write(chip, LOW_BATT_THRESHOLD_REG,
-		CHG_LOW_BATT_THRESHOLD_MASK, reg);
-	if (rc) {
-		dev_err(chip->dev, "Couldn't set LOW_BATT_THRESHOLD_REG rc=%d\n",
-				rc);
-		return rc;
-	}
-#endif
-	
 	/* set pre-charging current */
 	reg = CHG_PRE_450MA;
 	rc = smb358_masked_write(chip, CHG_CURRENT_CTRL_REG,
@@ -2735,7 +2719,6 @@ static void dump_regs(struct smb358_charger *chip)
 			dev_err(chip->dev, "Couldn't read 0x%02x rc = %d\n",
 					addr, rc);
 		else
-			//pr_debug("smb358_read_reg0x%02x = 0x%02x\n", addr, reg);
 			regs2[addr-FIRST_STATUS_REG] = reg;
 	}
 	pr_debug("STATUS_REG regs2[0x35]=0x%02x,regs2[0x36]=0x%02x,regs2[0x37]=0x%02x,regs2[0x38]=0x%02x,regs2[0x39]=0x%02x,regs2[0x3a]=0x%02x,regs2[0x3b]=0x%02x,regs2[0x3c]=0x%02x,regs2[0x3d]=0x%02x,regs2[0x3e]=0x%02x,regs2[0x3f]=0x%02x\n",regs2[0],regs2[1],regs2[2],regs2[3],regs2[4],regs2[5],regs2[6],regs2[7],regs2[8],regs2[9],regs2[10]);
@@ -2746,7 +2729,6 @@ static void dump_regs(struct smb358_charger *chip)
 			dev_err(chip->dev, "Couldn't read 0x%02x rc = %d\n",
 					addr, rc);
 		else
-			//pr_debug("smb358_read_reg0x%02x = 0x%02x\n", addr, reg);
 			regs3[addr-FIRST_CMD_REG] = reg;
 	}
 	pr_debug("CMD_REG   regs3[0x30]=0x%02x,regs3[0x31]=0x%02x,regs3[0x32]=0x%02x,regs3[0x33]=0x%02x\n",regs3[0],regs3[1],regs3[0],regs3[3]);
@@ -2790,12 +2772,10 @@ static int smb_parse_dt(struct smb358_charger *chip)
 	else
 		chip->chg_valid_act_low = gpio_flags & OF_GPIO_ACTIVE_LOW;
 
-	#if 1//VENDOR_EDIT
 	chip->stat_gpio = of_get_named_gpio_flags(node,
 				"qcom,stat-gpio", 0, &gpio_flags);
 	if (!gpio_is_valid(chip->stat_gpio))
 		dev_dbg(chip->dev, "Invalid stat-gpio");
-	#endif
 
 	rc = of_property_read_u32(node, "qcom,fastchg-current-max-ma",
 						&chip->fastchg_current_max_ma);
@@ -2967,7 +2947,7 @@ static void update_smb358_thread(struct work_struct *work)
 				
 	smb358_get_prop_batt_capacity(chip);
 	#ifdef OPPO_BATTERY_ENCRPTION
-	if((chip->chg_present) && ((is_project(OPPO_14013)) || (is_project(OPPO_14033))))
+	if((chip->chg_present)
 	{
 		oppo_battery_status_check();
 		if(!oppo_high_battery_status)
@@ -2993,10 +2973,8 @@ static void delayed_smb358_wakeup_thread(struct work_struct *work)
 	struct smb358_charger *chip = container_of(dwork,
 				struct smb358_charger, smb358_delayed_wakeup_work);
 
-	//dev_dbg(chip->dev, "%s awake_lock=%d chg_in = %d\n",__func__,g_is_wakeup,g_chg_in);
 	//if awake not be locked,we can`t relax it here, and if usb is present new,we can`t relax is also
 	if((g_is_wakeup == 1)&&(g_chg_in == 0)){
-		//dev_dbg(chip->dev,"%s: relax awake\n",__func__);
 		__pm_relax(&chip->source);
 		g_is_wakeup = 0;
 	}
@@ -3035,7 +3013,6 @@ static ssize_t store_ID_status(struct device *dev,struct device_attribute *attr,
 	}		
 	return size;
 }
-//static DEVICE_ATTR(ID_status, 0664, show_ID_status, store_ID_status);
 static DEVICE_ATTR(ID_status, 0664, show_ID_status, store_ID_status);
 #endif
 
@@ -3092,8 +3069,7 @@ static int smb358_charger_probe(struct i2c_client *client,
 				"%s: Failed to get i2c regulator\n",
 					__func__);
 		retval = PTR_ERR(chip->vcc_i2c);
-//		goto err_get_vtg_i2c;
-		return -1;//retval;
+		return -1;
 	}
 
 	if (regulator_count_voltages(chip->vcc_i2c) > 0) {
@@ -3210,38 +3186,6 @@ static int smb358_charger_probe(struct i2c_client *client,
 		enable_irq_wake(irq);
 	}	
 
-	#if 0//ndef VENDOR_EDIT
-	chip->irq_gpio = of_get_named_gpio_flags(chip->dev->of_node,
-				"qcom,irq-gpio", 0, NULL);
-
-	/* add some irq gpio get verify operation */
-	if (gpio_is_valid(chip->irq_gpio)) {
-		retval = gpio_request(chip->irq_gpio, "smb358_irq");
-		if (retval) {
-			dev_err(&client->dev, "irq gpio request failed");
-		}
-		retval = gpio_direction_input(chip->irq_gpio);
-		if (retval) {
-			dev_err(&client->dev,
-					"set_direction for irq gpio failed\n");
-		}
-	}
-
-	/* STAT irq configuration */
-	if (client->irq) {
-		rc = devm_request_threaded_irq(&client->dev, client->irq, NULL,
-				smb358_chg_stat_handler,
-				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				"smb358_chg_stat_irq", chip);
-		if (rc) {
-			dev_err(&client->dev,
-				"Failed STAT irq=%d request rc = %d\n",
-				client->irq, rc);
-			goto fail_chg_valid_irq;
-		}
-		enable_irq_wake(client->irq);
-	}
-	#else
 	/* STAT irq configuration */
 	if (gpio_is_valid(chip->stat_gpio)) {
 		rc = gpio_request(chip->stat_gpio, "smb358_stat");
@@ -3275,7 +3219,6 @@ static int smb358_charger_probe(struct i2c_client *client,
 		}
 		enable_irq_wake(client->irq);
 	}
-	#endif
 
 	/* add hot/cold temperature monitor */
 	chip->charging_smb358_temp_statu = SMB358_CHG_TEMP_NORMAL;
@@ -3360,8 +3303,7 @@ static int smb358_charger_probe(struct i2c_client *client,
 
 	dump_regs(chip);
 
-	#ifdef VENDOR_EDIT
-	if((get_boot_mode() == MSM_BOOT_MODE__RF) || (get_boot_mode() == MSM_BOOT_MODE__WLAN)) 
+	if((get_boot_mode() == MSM_BOOT_MODE__RF) || (get_boot_mode() == MSM_BOOT_MODE__WLAN))
 	{
 		chip->multiple_test = 1;
 		rc = smb358_masked_write(chip, CMD_A_REG, CMD_A_CHG_SUSP_EN_MASK, CMD_A_CHG_SUSP_EN_BIT);
@@ -3370,12 +3312,9 @@ static int smb358_charger_probe(struct i2c_client *client,
 	{
 		chip->multiple_test = 0;
 	}	
-	#endif
 	#ifdef OPPO_BATTERY_ENCRPTION
 	rc = device_create_file((chip->dev), &dev_attr_ID_status);
-	if((is_project(OPPO_14013)) || (is_project(OPPO_14033)))
-	{
-		
+
 		Gpio_BatId_Init();
 		oppo_battery_status_init();
 		if(!oppo_high_battery_status)
@@ -3383,16 +3322,13 @@ static int smb358_charger_probe(struct i2c_client *client,
 			 smb358_float_voltage_set(chip, chip->non_standard_vfloat_mv);
 			 chip->fastchg_current_ma = chip->non_standard_fastchg_current_ma;
 		}
-	}	
 	#endif
 	
 	chip_smb358 = chip;
 	dev_err(chip->dev, "SMB358 successfully probed. charger=%d, batt=%d, mode = %d,rc = %d\n",
 			chip->chg_present, smb358_get_prop_batt_present(chip), get_boot_mode(),rc);
 	return 0;
-	
-//err_get_vtg_i2c:
-//	regulator_put(chip->vcc_i2c);
+
 err_set_vtg_i2c:
 	if (regulator_count_voltages(chip->vcc_i2c) > 0)
 		regulator_set_voltage(chip->vcc_i2c, 0, SMB_I2C_VTG_MAX_UV);
@@ -3463,29 +3399,23 @@ static int smb358_resume(struct device *dev)
 		do_i2c_action(chip);
 		chip->action_pending = false;
 	}
-	
+
 	if (chip_smb358->otg_enable_pending) {	
 		chip_smb358->otg_enable_pending = false;
 		smb358_chg_otg_enable();
 	}
-	
+
 	if (chip_smb358->otg_disable_pending) {		
 		chip_smb358->otg_disable_pending = false;
 		smb358_chg_otg_disable();
 	}
-	
-	#ifdef VENDOR_EDIT
+
 	if (chip->bms_psy)
 	{
 		smb358_get_prop_batt_capacity(chip);
 		power_supply_changed(&chip->batt_psy);
-		//chip->bms_psy->get_property(chip->bms_psy,POWER_SUPPLY_PROP_CAPACITY, &ret);
-		//bat_volt_bms_soc = ret.intval;	
-		//bat_volt_check_point = bat_volt_bms_soc;
-		//g_soc_sync_time = 0;
 		dev_dbg(chip->dev, "smb358_resume update  bat_volt_bms_soc = %d, bat_volt_check_point = %d\r\n",bat_volt_bms_soc,bat_volt_check_point);		
 	}
-	#endif
 	
 	schedule_delayed_work(&chip->update_smb358_thread_work,
 			      round_jiffies_relative(msecs_to_jiffies

@@ -847,22 +847,6 @@ void lm3630_control(int bl_level)
 		ret = lm3630_write_reg(pchip->client,REG_BRT_A,bl_level);	
 		is_suspend = 0;
 	} 
-/* OPPO 2014-06-11 gousj Modify begin for 14017 backlight not work */
-	if((is_project(OPPO_13095))||(is_project(OPPO_14029))){ 
-/* OPPO 2014-06-11 gousj Modify end */
-		if(bl_level <= CABC_DISABLE_LEVEL && pwm_flag==true){
-			set_backlight_pwm(0);
-		//	pr_err("lm3630_control set_backlight_pwm 0");
-		}else if(bl_level > CABC_DISABLE_LEVEL && pwm_flag==false && cabc_mode > 0){
-			set_backlight_pwm(1);
-		//	pr_err("lm3630_control set_backlight_pwm 1");
-		}
-/* OPPO 2014-05-30 yxq add begin for 14029 ftm mode backlight flick */
-        if ((MSM_BOOT_MODE__FACTORY == get_boot_mode()) && (is_project(OPPO_14029) || is_project(OPPO_13095))) {
-            set_backlight_pwm(0);
-        }
-/* OPPO 2014-05-30 yxq add end */
-	}
 	return;
 }
 
