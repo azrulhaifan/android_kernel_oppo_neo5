@@ -32,6 +32,7 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/platform_device.h>
 #include <linux/wakelock.h>
+#include <mach/oppo_project.h>
 
 /* QPNP IADC register definition */
 #define QPNP_IADC_REVISION1				0x0
@@ -1398,8 +1399,19 @@ static int __devinit qpnp_iadc_probe(struct spmi_device *spmi)
 
 	mutex_init(&iadc->adc->adc_lock);
 
+#ifdef CONFIG_MACH_14013
+	if(get_PCB_Version() == HW_VERSION__10){
+	rc = of_property_read_u32(node, "qcom,rsense_20",&iadc->rsense);
+		pr_err("qpnp_iadc_probe,20uohm\r\n");
+	}else{
 	rc = of_property_read_u32(node, "qcom,rsense",
 			&iadc->rsense);
+			pr_err("qpnp_iadc_probe,10uohm\r\n");
+		}
+#else
+	rc = of_property_read_u32(node, "qcom,rsense",
+			&iadc->rsense);
+#endif
 	if (rc)
 		pr_debug("Defaulting to internal rsense\n");
 	else {
