@@ -900,12 +900,6 @@ static int cpp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 
 	CPP_DBG("open %d %p\n", i, &fh->vfh);
 	cpp_dev->cpp_open_cnt++;
-	if (cpp_dev->cpp_open_cnt == 1) {
-		cpp_init_hardware(cpp_dev);
-		iommu_attach_device(cpp_dev->domain, cpp_dev->iommu_ctx);
-		cpp_init_mem(cpp_dev);
-		cpp_dev->state = CPP_STATE_IDLE;
-	}
 	mutex_unlock(&cpp_dev->mutex);
 	return 0;
 }
@@ -1119,8 +1113,6 @@ static void msm_cpp_do_timeout_work(struct work_struct *work)
 
 	this_frame = cpp_timer.data.processed_frame;
 	pr_err("ReInstalling cpp_timer\n");
-	setup_timer(&cpp_timer.cpp_timer, cpp_timer_callback,
-		(unsigned long)&cpp_timer);
 	pr_err("Starting timer to fire in %d ms. (jiffies=%lu)\n",
 		CPP_CMD_TIMEOUT_MS, jiffies);
 	ret = mod_timer(&cpp_timer.cpp_timer,
@@ -1630,6 +1622,30 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			rc = -EINVAL;
 		}
 
+		break;
+	}
+	case VIDIOC_MSM_CPP_INIT_HW: {
+		if (cpp_dev->cpp_open_cnt == 1) {
+			rc = cpp_init_hardware(cpp_dev);
+			if (rc < 0) {
+				pr_err("error in hw init\n");
+				rc = -EINVAL;
+				break;
+			}
+			rc = iommu_attach_device(cpp_dev->domain, cpp_dev->iommu_ctx);
+			if (rc < 0) {
+				pr_err("error in attach device\n");
+				rc = -EINVAL;
+				break;
+			}
+			rc = cpp_init_mem(cpp_dev);
+			if (rc < 0) {
+				pr_err("error in mem init\n");
+				rc = -EINVAL;
+				break;
+			}
+			cpp_dev->state = CPP_STATE_IDLE;
+		}
 		break;
 	}
 	}

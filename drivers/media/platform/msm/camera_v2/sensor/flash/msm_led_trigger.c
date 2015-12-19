@@ -31,6 +31,8 @@ extern int32_t msm_led_torch_create_classdev(
 
 static enum flash_type flashtype;
 static struct msm_led_flash_ctrl_t fctrl;
+bool blink_state;
+int flash_state;
 
 static int32_t msm_led_trigger_get_subdev_id(struct msm_led_flash_ctrl_t *fctrl,
 	void *arg)
@@ -119,6 +121,188 @@ static int32_t msm_led_trigger_config(struct msm_led_flash_ctrl_t *fctrl,
 	CDBG("flash_set_led_state: return %d\n", rc);
 	return rc;
 }
+
+//lingjianing add for blink test
+static void msm_led_trigger_test_blink_work(struct work_struct *work)
+{
+        struct delayed_work *dwork = to_delayed_work(work);
+        if(blink_state)
+          led_trigger_event(fctrl.torch_trigger,fctrl.torch_op_current);
+        else 
+         led_trigger_event(fctrl.torch_trigger,0);
+        blink_state = !blink_state;
+        schedule_delayed_work(dwork, msecs_to_jiffies(1100));
+        return;
+}
+//zhangzr add for flashlight test
+static ssize_t msm_led_trigger_test_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+    int new_mode = simple_strtoul(buf, NULL, 10);
+    uint32_t i;
+    uint32_t curr_l;
+
+    if(new_mode == 0)
+    {
+            printk("close flash called\n");
+           //lingjianing add for blink test
+	     if (flash_state == 2) 
+            cancel_delayed_work_sync(&fctrl.dwork);
+	     flash_state = 0;
+            for (i = 0; i < fctrl.num_sources; i++)
+                if (fctrl.flash_trigger[i])
+                    led_trigger_event(fctrl.flash_trigger[i], 0);
+            if (fctrl.torch_trigger)
+                led_trigger_event(fctrl.torch_trigger, 0);
+    }
+    else if(new_mode == 1)
+    {
+            printk("open flash called\n");
+           //lingjianing add for blink test	
+	    if (flash_state == 2) 
+           cancel_delayed_work_sync(&fctrl.dwork);
+	    flash_state = 1;
+            if (fctrl.torch_trigger) {
+                curr_l = fctrl.torch_op_current;
+                pr_err("LED current clamped to %d\n",
+                	curr_l);
+                led_trigger_event(fctrl.torch_trigger,
+                curr_l);
+            }
+    } 
+       //lingjianing add for blink test
+    else if(new_mode == 2)
+    {   
+         printk("blink called\n");
+         if (flash_state == 2) 
+         cancel_delayed_work_sync(&fctrl.dwork);
+	  blink_state=true;
+	  flash_state = 2;
+	  INIT_DELAYED_WORK(&fctrl.dwork, msm_led_trigger_test_blink_work);
+    	  schedule_delayed_work(&fctrl.dwork, msecs_to_jiffies(50));
+     }
+    return count;
+}
+
+static DEVICE_ATTR(test, 0660,
+		   NULL, msm_led_trigger_test_store);
+
+static struct attribute *msm_led_trigger_attributes[] = {
+        &dev_attr_test.attr,
+        NULL
+};
+
+static const struct attribute_group msm_led_trigger_attr_group = {
+	.attrs = msm_led_trigger_attributes,
+};
+//zhangzr add end
+
+//LiuBin@Camera, 2014/04/14, Add proc for flash test
+#include <linux/proc_fs.h>
+static int flash_proc_read(char *page, char **start, off_t off, int count,
+   int *eof, void *data)
+{
+	
+	int len = 0;
+
+	if (fctrl.flash_trigger_name == NULL)
+	{
+		pr_err("flash_trigger_name is NULL \r\n");
+		return 0;
+	}
+	
+	len = sprintf(page, fctrl.flash_trigger_name[0]);
+	if (len <= off+count)
+		*eof = 1;
+	*start = page + off;
+	len -= off;
+	if (len > count)
+		len = count;
+	if (len < 0)
+		len = 0;
+	return len;
+}
+
+static int flash_proc_write(struct file *filp, const char __user *buff,
+                        	unsigned long len, void *data)
+{
+	int i = 0;
+	char buf[8] = {0};
+	int new_mode = 0;
+	uint32_t curr_l;
+
+	if (len > 8)
+		len = 8;
+
+	if (copy_from_user(buf, buff, len)) {
+		pr_err("proc write error.\n");
+		return -EFAULT;
+	}
+
+	new_mode = simple_strtoul(buf, NULL, 10);
+	if(new_mode == 0)
+    {
+		printk("close flash called\n");
+		if (flash_state == 2) 
+			cancel_delayed_work_sync(&fctrl.dwork);
+		flash_state = 0;
+		for (i = 0; i < fctrl.num_sources; i++)
+		if (fctrl.flash_trigger[i])
+		led_trigger_event(fctrl.flash_trigger[i], 0);
+		if (fctrl.torch_trigger)
+		led_trigger_event(fctrl.torch_trigger, 0);
+    }
+    else if(new_mode == 1)
+    {
+		printk("open flash called\n");
+	    if (flash_state == 2) 
+           cancel_delayed_work_sync(&fctrl.dwork);
+	    flash_state = 1;
+		if (fctrl.torch_trigger) {
+			curr_l = fctrl.torch_op_current;
+			pr_err("LED current clamped to %d\n",
+				curr_l);
+			led_trigger_event(fctrl.torch_trigger,
+				curr_l);
+		}
+    } 
+    else if(new_mode == 2)
+    {   
+		printk("blink called\n");
+		if (flash_state == 2) 
+			cancel_delayed_work_sync(&fctrl.dwork);
+		blink_state=true;
+		flash_state = 2;
+		INIT_DELAYED_WORK(&fctrl.dwork, msm_led_trigger_test_blink_work);
+		schedule_delayed_work(&fctrl.dwork, msecs_to_jiffies(50));
+	}
+	
+	return len;
+}
+
+static int flash_proc_init(struct msm_led_flash_ctrl_t *flash_ctl)
+{
+	int ret=0;
+	
+	struct proc_dir_entry *proc_entry = create_proc_entry( "qcom_flash", 0666, NULL);
+
+	if (proc_entry == NULL)
+	{
+		ret = -ENOMEM;
+	  	pr_err("[%s]: Error! Couldn't create qcom_flash proc entry\n", __func__);
+	}
+	else
+	{
+		proc_entry->data = flash_ctl;
+		proc_entry->read_proc = flash_proc_read;
+		proc_entry->write_proc = flash_proc_write;
+		pr_err("[%s]: create qcom_flash proc success \n", __func__);
+	}
+	
+	return ret;
+}
+
+
 
 static const struct of_device_id msm_led_trigger_dt_match[] = {
 	{.compatible = "qcom,camera-led-flash"},
@@ -277,6 +461,16 @@ torch_failed:
 	rc = msm_led_flash_create_v4lsubdev(pdev, &fctrl);
 	if (!rc)
 		msm_led_torch_create_classdev(pdev, &fctrl);
+
+//zhangzr add for flashlight test
+      if (rc >= 0)
+        rc = sysfs_create_group(&pdev->dev.kobj, &msm_led_trigger_attr_group);
+//zhangzr add end
+
+
+//LiuBin@MtkCamera, 2014/04/14, Add for flash proc
+	if (rc >= 0)
+    	flash_proc_init(&fctrl);
 
 	return rc;
 }
