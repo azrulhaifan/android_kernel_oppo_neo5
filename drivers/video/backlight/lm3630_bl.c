@@ -420,10 +420,6 @@ static int lm3630_dt(struct device *dev, struct lm3630_platform_data *pdata)
 			pdata->pwm_ctrl=temp_val;
 			pwm_disabled = false;
 		}
-		if(is_project(OPPO_13095)){
-			if(get_PCB_Version() < HW_VERSION__12)
-				pdata->pwm_ctrl=PWM_CTRL_DISABLE;	
-		}
 	}
 	
 	rc = of_property_read_u32(np, "ti,pwm-period", &temp_val);
